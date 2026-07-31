@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   soundEnabled: true,
   animationsEnabled: true,
   dailyGoalHours: 4,
+  lastSubject: '',
 };
 
 let sessions = [];        // array of saved study sessions
@@ -39,11 +40,20 @@ let timerState = 'idle';  // 'idle' | 'running' | 'paused'
 let sessionStartTs = null;
 let pausedAtTs = null;
 let totalPausedMs = 0;
+let currentSessionSubject = '';
 
 let tickIntervalId = null;
 let clockIntervalId = null;
 let chartInstance = null;
+let subjectChartInstance = null;
 let confirmResolver = null;
+
+const DEFAULT_SUBJECT = 'Chưa phân loại';
+const SUBJECT_COLOR_PALETTE = [
+  '#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EC4899',
+  '#8B5CF6', '#EF4444', '#14B8A6', '#F97316', '#3B82F6',
+];
+let currentSubjectPeriod = 'day'; // 'day' | 'week' | 'month' | 'year'
 
 /* Cached DOM references (populated in init) */
 const dom = {};
@@ -92,7 +102,7 @@ function saveActiveState() {
     localStorage.removeItem(STORAGE_KEYS.active);
     return;
   }
-  const activeState = { timerState, sessionStartTs, pausedAtTs, totalPausedMs };
+  const activeState = { timerState, sessionStartTs, pausedAtTs, totalPausedMs, subject: currentSessionSubject };
   localStorage.setItem(STORAGE_KEYS.active, JSON.stringify(activeState));
 }
 
@@ -175,6 +185,10 @@ function startTimer() {
   totalPausedMs = 0;
   pausedAtTs = null;
   timerState = 'running';
+  currentSessionSubject = (dom.subjectInput.value || '').trim() || DEFAULT_SUBJECT;
+  dom.subjectInput.value = currentSessionSubject;
+  dom.subjectInput.disabled = true;
+  dom.subjectRow.classList.add('locked');
   runTickLoop();
   saveActiveState();
   updateTimerUI();
@@ -209,15 +223,19 @@ function endTimer() {
 
   // Only save meaningful sessions (avoid accidental 0-second entries)
   if (durationSeconds >= 1) {
+    const subject = currentSessionSubject || DEFAULT_SUBJECT;
     const session = {
       id: generateId(),
       startTs: sessionStartTs,
       endTs,
       duration: durationSeconds,
       dateStr: toDateStr(new Date(sessionStartTs)),
+      subject,
     };
     sessions.push(session);
     saveSessions();
+    settings.lastSubject = subject;
+    saveSettings();
     showToast('Đã lưu phiên học thành công', 'success');
   }
 
@@ -228,7 +246,12 @@ function endTimer() {
   sessionStartTs = null;
   pausedAtTs = null;
   totalPausedMs = 0;
+  currentSessionSubject = '';
   saveActiveState();
+
+  dom.subjectInput.disabled = false;
+  dom.subjectRow.classList.remove('locked');
+  populateSubjectDatalist();
 
   updateTimerUI();
   dom.timerDisplay.textContent = '00:00:00';
@@ -287,6 +310,10 @@ function restoreActiveSession() {
   sessionStartTs = active.sessionStartTs;
   pausedAtTs = active.pausedAtTs;
   totalPausedMs = active.totalPausedMs;
+  currentSessionSubject = active.subject || DEFAULT_SUBJECT;
+  dom.subjectInput.value = currentSessionSubject;
+  dom.subjectInput.disabled = true;
+  dom.subjectRow.classList.add('locked');
 
   if (timerState === 'running') {
     runTickLoop();
@@ -352,6 +379,72 @@ function totalForDate(date) {
     .reduce((sum, s) => sum + s.duration, 0);
 }
 
+/** Refresh the <datalist> of subjects with every subject used so far (most recent first) */
+function populateSubjectDatalist() {
+  const seen = new Set();
+  const ordered = [];
+  [...sessions].sort((a, b) => b.startTs - a.startTs).forEach((s) => {
+    const subj = s.subject || DEFAULT_SUBJECT;
+    if (!seen.has(subj)) {
+      seen.add(subj);
+      ordered.push(subj);
+    }
+  });
+  dom.subjectDatalist.innerHTML = ordered.map((s) => `<option value="${escapeHtml(s)}"></option>`).join('');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/** Stable color per subject name, cycling through the palette */
+const subjectColorCache = new Map();
+function getSubjectColor(subject) {
+  if (subjectColorCache.has(subject)) return subjectColorCache.get(subject);
+  let hash = 0;
+  for (let i = 0; i < subject.length; i += 1) hash = (hash * 31 + subject.charCodeAt(i)) >>> 0;
+  const color = SUBJECT_COLOR_PALETTE[hash % SUBJECT_COLOR_PALETTE.length];
+  subjectColorCache.set(subject, color);
+  return color;
+}
+
+/** Aggregate seconds studied per subject for the given period ('day'|'week'|'month'|'year') */
+function computeSubjectStats(period) {
+  const now = new Date();
+  const today = todayStr();
+  const weekStart = startOfWeek(now);
+  const weekEnd = endOfWeek(now);
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+
+  const totals = new Map();
+
+  for (const s of sessions) {
+    const startDate = new Date(s.startTs);
+    let inPeriod = false;
+
+    if (period === 'day') {
+      inPeriod = s.dateStr === today;
+    } else if (period === 'week') {
+      inPeriod = startDate >= weekStart && startDate < weekEnd;
+    } else if (period === 'month') {
+      inPeriod = startDate.getFullYear() === curYear && startDate.getMonth() === curMonth;
+    } else if (period === 'year') {
+      inPeriod = startDate.getFullYear() === curYear;
+    }
+
+    if (!inPeriod) continue;
+    const subj = s.subject || DEFAULT_SUBJECT;
+    totals.set(subj, (totals.get(subj) || 0) + s.duration);
+  }
+
+  return [...totals.entries()]
+    .map(([subject, duration]) => ({ subject, duration }))
+    .sort((a, b) => b.duration - a.duration);
+}
+
 /* ---------------- 6. Rendering ---------------- */
 
 function renderAll() {
@@ -359,6 +452,7 @@ function renderAll() {
   renderStats(stats);
   renderGoal(stats);
   renderChart();
+  renderSubjectChart();
   renderLog();
 }
 
@@ -452,6 +546,83 @@ function renderChart() {
   });
 }
 
+function renderSubjectChart() {
+  const data = computeSubjectStats(currentSubjectPeriod);
+  const rootStyles = getComputedStyle(document.documentElement);
+  const cardBg = rootStyles.getPropertyValue('--bg-1').trim() || '#10121c';
+
+  const hasData = data.length > 0;
+  dom.subjectChartBody.style.display = hasData ? 'grid' : 'none';
+  dom.subjectEmptyState.hidden = hasData;
+
+  if (!hasData) {
+    if (subjectChartInstance) {
+      subjectChartInstance.destroy();
+      subjectChartInstance = null;
+    }
+    dom.subjectLegend.innerHTML = '';
+    return;
+  }
+
+  const labels = data.map((d) => d.subject);
+  const values = data.map((d) => +(d.duration / 3600).toFixed(2));
+  const colors = data.map((d) => getSubjectColor(d.subject));
+  const totalDuration = data.reduce((sum, d) => sum + d.duration, 0);
+
+  const ctx = dom.subjectChart.getContext('2d');
+
+  if (subjectChartInstance) {
+    subjectChartInstance.data.labels = labels;
+    subjectChartInstance.data.datasets[0].data = values;
+    subjectChartInstance.data.datasets[0].backgroundColor = colors;
+    subjectChartInstance.data.datasets[0].borderColor = cardBg;
+    subjectChartInstance.options.animation.duration = settings.animationsEnabled ? 500 : 0;
+    subjectChartInstance.update();
+  } else {
+    subjectChartInstance = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderColor: cardBg,
+          borderWidth: 2,
+          hoverOffset: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        animation: { duration: settings.animationsEnabled ? 500 : 0 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (item) => `${item.label}: ${item.formattedValue}h`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  dom.subjectLegend.innerHTML = data.map((d) => {
+    const percent = totalDuration > 0 ? Math.round((d.duration / totalDuration) * 100) : 0;
+    return `
+      <div class="subject-legend-item">
+        <span class="subject-legend-dot" style="background:${getSubjectColor(d.subject)}"></span>
+        <span class="subject-legend-name">${escapeHtml(d.subject)}</span>
+        <span class="subject-legend-meta">
+          <span class="subject-legend-time">${formatDurationReadable(d.duration)}</span>
+          <span class="subject-legend-percent">${percent}%</span>
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderLog() {
   const sorted = [...sessions].sort((a, b) => b.startTs - a.startTs);
   dom.logList.innerHTML = '';
@@ -474,9 +645,19 @@ function createLogItemElement(session) {
   const dateObj = new Date(session.startTs);
   const dateLabel = `${WEEKDAY_LABELS[dateObj.getDay()]}, ${pad(dateObj.getDate())}/${pad(dateObj.getMonth() + 1)}/${dateObj.getFullYear()}`;
 
+  const subject = session.subject || DEFAULT_SUBJECT;
+  const subjectColor = getSubjectColor(subject);
+  const rgb = hexToRgb(subjectColor) || { r: 79, g: 70, b: 229 };
+  const badgeStyle = `background: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14); color: ${subjectColor};`;
+
   item.innerHTML = `
     <div class="log-item-main">
-      <span class="log-item-date">${dateLabel}</span>
+      <div class="log-item-top-row">
+        <span class="log-item-date">${dateLabel}</span>
+        <span class="log-item-subject" style="${badgeStyle}">
+          <i class="fa-solid fa-tag"></i>${escapeHtml(subject)}
+        </span>
+      </div>
       <span class="log-item-time">${formatClockTime(session.startTs)} → ${formatClockTime(session.endTs)}</span>
     </div>
     <div class="log-item-right">
@@ -755,6 +936,7 @@ function applyTheme(theme) {
 function toggleTheme() {
   applyTheme(settings.theme === 'dark' ? 'light' : 'dark');
   renderChart(); // refresh chart colors for new theme
+  renderSubjectChart();
 }
 
 function applyAccentColor(color) {
@@ -864,6 +1046,7 @@ function importData(file) {
         applySettingsToUI();
       }
 
+      populateSubjectDatalist();
       renderAll();
       showToast('Đã nhập dữ liệu thành công', 'success');
     } catch (err) {
@@ -895,6 +1078,12 @@ async function resetAllData() {
   applySettingsToUI();
   updateTimerUI();
   dom.timerDisplay.textContent = '00:00:00';
+  dom.subjectInput.value = '';
+  dom.subjectInput.disabled = false;
+  dom.subjectRow.classList.remove('locked');
+  currentSubjectPeriod = 'day';
+  document.querySelectorAll('.period-tab').forEach((t) => t.classList.toggle('active', t.dataset.period === 'day'));
+  populateSubjectDatalist();
   renderAll();
   closeSettings();
   showToast('Đã reset toàn bộ dữ liệu', 'success');
@@ -921,6 +1110,8 @@ function cacheDom() {
     'statSessionsToday', 'statLongest', 'statAverage',
     'goalInput', 'goalProgressFill', 'goalPercentText', 'goalRemainingText',
     'weekChart', 'logList', 'btnClearAll',
+    'subjectRow', 'subjectInput', 'subjectDatalist',
+    'subjectChartBody', 'subjectChart', 'subjectLegend', 'subjectEmptyState',
     'musicCard', 'musicMinimizeBtn', 'musicUrlInput', 'musicLoadBtn',
     'musicPlayerWrap', 'musicEmptyState', 'musicFallbackLink', 'musicControls',
     'musicPlayPauseBtn', 'musicMuteBtn', 'musicVolumeSlider', 'musicRemoveBtn',
@@ -961,6 +1152,16 @@ function wireEvents() {
   });
 
   dom.btnClearAll.addEventListener('click', clearAllSessions);
+
+  document.querySelectorAll('.period-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      if (tab.classList.contains('active')) return;
+      document.querySelectorAll('.period-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentSubjectPeriod = tab.dataset.period;
+      renderSubjectChart();
+    });
+  });
 
   document.querySelectorAll('.swatch').forEach((sw) => {
     sw.addEventListener('click', () => applyAccentColor(sw.dataset.color));
@@ -1009,6 +1210,8 @@ function init() {
   loadMusicState();
 
   applySettingsToUI();
+  populateSubjectDatalist();
+  if (settings.lastSubject && timerState === 'idle') dom.subjectInput.value = settings.lastSubject;
   if (musicState.lastUrl) dom.musicUrlInput.value = musicState.lastUrl;
   if (musicState.volume !== undefined) dom.musicVolumeSlider.value = musicState.volume;
   wireEvents();
