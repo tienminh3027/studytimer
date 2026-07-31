@@ -1,1 +1,330 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Study Timer — Đồng hồ học tập</title>
 
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<!-- Styles -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient background blobs (purely decorative) -->
+  <div class="bg-blob blob-1" aria-hidden="true"></div>
+  <div class="bg-blob blob-2" aria-hidden="true"></div>
+
+  <div class="app-shell">
+
+    <!-- ================= HEADER ================= -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon"><i class="fa-solid fa-graduation-cap"></i></span>
+        <div class="brand-text">
+          <h1>Study Timer</h1>
+          <p id="currentDate" class="brand-sub">—</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="live-clock" id="liveClock">--:--:--</div>
+        <button class="icon-btn" id="soundToggleBtn" title="Bật/tắt âm thanh" aria-label="Bật/tắt âm thanh">
+          <i class="fa-solid fa-volume-high"></i>
+        </button>
+        <button class="icon-btn" id="themeToggleBtn" title="Chuyển giao diện sáng/tối" aria-label="Chuyển giao diện">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <button class="icon-btn" id="settingsBtn" title="Cài đặt" aria-label="Cài đặt">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+
+      <!-- ================= HERO: TIMER ================= -->
+      <section class="card timer-card hero" id="timerCard">
+        <div class="timer-status" id="timerStatus">
+          <span class="status-dot"></span>
+          <span id="timerStatusText">Sẵn sàng</span>
+        </div>
+
+        <div class="timer-display" id="timerDisplay">00:00:00</div>
+
+        <div class="subject-row" id="subjectRow">
+          <i class="fa-solid fa-tag subject-row-icon"></i>
+          <input
+            type="text"
+            id="subjectInput"
+            class="subject-input"
+            list="subjectDatalist"
+            placeholder="Môn học (vd: Toán, Tiếng Anh, Lý...)"
+            maxlength="40"
+            autocomplete="off"
+          >
+          <datalist id="subjectDatalist"></datalist>
+        </div>
+
+        <div class="timer-actions">
+          <button class="btn btn-primary" id="btnStart">
+            <i class="fa-solid fa-play"></i><span>Bắt đầu</span>
+          </button>
+          <button class="btn btn-secondary" id="btnPause" disabled>
+            <i class="fa-solid fa-pause"></i><span>Tạm dừng</span>
+          </button>
+          <button class="btn btn-secondary" id="btnResume" disabled>
+            <i class="fa-solid fa-play"></i><span>Tiếp tục</span>
+          </button>
+          <button class="btn btn-danger" id="btnEnd" disabled>
+            <i class="fa-solid fa-stop"></i><span>Kết thúc</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= STATS GRID ================= -->
+      <section class="stats-grid">
+        <div class="card stat-card">
+          <div class="stat-icon"><i class="fa-solid fa-sun"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Hôm nay</span>
+            <span class="stat-value" id="statToday">0h 0m</span>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon"><i class="fa-solid fa-calendar-week"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Tuần này</span>
+            <span class="stat-value" id="statWeek">0h 0m</span>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon"><i class="fa-solid fa-calendar-days"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Tháng này</span>
+            <span class="stat-value" id="statMonth">0h 0m</span>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-icon"><i class="fa-solid fa-infinity"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Mọi lúc</span>
+            <span class="stat-value" id="statAll">0h 0m</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= SECONDARY STATS ================= -->
+      <section class="stats-grid secondary">
+        <div class="card stat-card small">
+          <div class="stat-icon"><i class="fa-solid fa-list-check"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Số phiên hôm nay</span>
+            <span class="stat-value" id="statSessionsToday">0</span>
+          </div>
+        </div>
+        <div class="card stat-card small">
+          <div class="stat-icon"><i class="fa-solid fa-trophy"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Phiên dài nhất</span>
+            <span class="stat-value" id="statLongest">0h 0m</span>
+          </div>
+        </div>
+        <div class="card stat-card small">
+          <div class="stat-icon"><i class="fa-solid fa-chart-simple"></i></div>
+          <div class="stat-info">
+            <span class="stat-label">Trung bình / phiên</span>
+            <span class="stat-value" id="statAverage">0h 0m</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= GOAL + CHART ================= -->
+      <section class="split-grid">
+
+        <div class="card goal-card">
+          <div class="card-header">
+            <h2><i class="fa-solid fa-bullseye"></i> Mục tiêu hôm nay</h2>
+          </div>
+          <div class="goal-input-row">
+            <label for="goalInput">Mục tiêu mỗi ngày (giờ)</label>
+            <input type="number" id="goalInput" min="0.5" max="24" step="0.5" value="4">
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="goalProgressFill"></div>
+          </div>
+          <div class="goal-meta">
+            <span id="goalPercentText">0%</span>
+            <span id="goalRemainingText">Còn thiếu 4h 0m</span>
+          </div>
+        </div>
+
+        <div class="card chart-card">
+          <div class="card-header">
+            <h2><i class="fa-solid fa-chart-column"></i> 7 ngày gần nhất</h2>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="weekChart"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= SUBJECT BREAKDOWN (PIE) ================= -->
+      <section class="card subject-chart-card">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-chart-pie"></i> Thống kê theo môn học</h2>
+          <div class="period-tabs" id="subjectPeriodTabs">
+            <button class="period-tab active" data-period="day" type="button">Ngày</button>
+            <button class="period-tab" data-period="week" type="button">Tuần</button>
+            <button class="period-tab" data-period="month" type="button">Tháng</button>
+            <button class="period-tab" data-period="year" type="button">Năm</button>
+          </div>
+        </div>
+
+        <div class="subject-chart-body" id="subjectChartBody">
+          <div class="chart-wrap subject-chart-wrap">
+            <canvas id="subjectChart"></canvas>
+          </div>
+          <div class="subject-legend" id="subjectLegend"></div>
+        </div>
+        <p class="empty-state" id="subjectEmptyState" hidden>Chưa có dữ liệu học tập cho khoảng thời gian này.</p>
+      </section>
+
+      <!-- ================= MUSIC ================= -->
+      <section class="card music-card" id="musicCard">
+        <div class="card-header">
+          <h2><i class="fa-brands fa-youtube"></i> Nhạc tập trung</h2>
+          <button class="icon-btn" id="musicMinimizeBtn" title="Thu nhỏ / phóng to" aria-label="Thu nhỏ hoặc phóng to">
+            <i class="fa-solid fa-compress"></i>
+          </button>
+        </div>
+
+        <div class="music-input-row">
+          <input type="text" id="musicUrlInput" placeholder="Dán link YouTube (lofi, nhạc không lời, playlist học bài...)">
+          <button class="btn btn-primary" id="musicLoadBtn">
+            <i class="fa-solid fa-play"></i><span>Phát</span>
+          </button>
+        </div>
+
+        <div class="music-player-wrap" id="musicPlayerWrap">
+          <div id="youtubePlayer"></div>
+          <p class="empty-state" id="musicEmptyState">Chưa có video nào. Dán link YouTube phía trên để nghe nhạc khi học.</p>
+          <a href="#" target="_blank" rel="noopener" class="music-fallback-link" id="musicFallbackLink" hidden>
+            <i class="fa-solid fa-arrow-up-right-from-square"></i> Không nhúng được — Mở video trên YouTube
+          </a>
+        </div>
+
+        <div class="music-controls" id="musicControls" hidden>
+          <button class="icon-btn" id="musicPlayPauseBtn" title="Phát/Tạm dừng"><i class="fa-solid fa-pause"></i></button>
+          <button class="icon-btn" id="musicMuteBtn" title="Tắt/bật tiếng"><i class="fa-solid fa-volume-high"></i></button>
+          <input type="range" id="musicVolumeSlider" min="0" max="100" value="70" title="Âm lượng">
+          <button class="icon-btn" id="musicRemoveBtn" title="Xóa video"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </section>
+
+      <!-- ================= LOG ================= -->
+      <section class="card log-card">
+        <div class="card-header">
+          <h2><i class="fa-solid fa-book"></i> Nhật ký học</h2>
+          <button class="btn btn-ghost-danger" id="btnClearAll">
+            <i class="fa-solid fa-trash"></i><span>Xóa toàn bộ</span>
+          </button>
+        </div>
+        <div class="log-list" id="logList">
+          <p class="empty-state" id="logEmptyState">Chưa có phiên học nào. Bắt đầu học để tạo nhật ký đầu tiên!</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <span>Study Timer · Dữ liệu được lưu ngay trên trình duyệt của bạn</span>
+    </footer>
+  </div>
+
+  <!-- ================= SETTINGS MODAL ================= -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal-box card">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-gear"></i> Cài đặt</h2>
+        <button class="icon-btn" id="closeSettingsBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-label">
+          <span>Màu chủ đạo</span>
+          <small>Tùy chỉnh màu nhấn của giao diện</small>
+        </div>
+        <div class="accent-swatches" id="accentSwatches">
+          <button class="swatch" data-color="#4F46E5" style="--sw:#4F46E5"></button>
+          <button class="swatch" data-color="#0EA5E9" style="--sw:#0EA5E9"></button>
+          <button class="swatch" data-color="#10B981" style="--sw:#10B981"></button>
+          <button class="swatch" data-color="#F59E0B" style="--sw:#F59E0B"></button>
+          <button class="swatch" data-color="#EC4899" style="--sw:#EC4899"></button>
+          <input type="color" id="accentColorInput" value="#4F46E5" title="Tùy chỉnh màu">
+        </div>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-label">
+          <span>Hiệu ứng chuyển động</span>
+          <small>Bật/tắt animation trong toàn bộ ứng dụng</small>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="animationToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-label">
+          <span>Xuất / Nhập dữ liệu</span>
+          <small>Sao lưu hoặc khôi phục dữ liệu học tập (.json)</small>
+        </div>
+        <div class="settings-actions">
+          <button class="btn btn-secondary" id="exportBtn"><i class="fa-solid fa-file-export"></i><span>Export</span></button>
+          <button class="btn btn-secondary" id="importBtn"><i class="fa-solid fa-file-import"></i><span>Import</span></button>
+          <input type="file" id="importInput" accept="application/json" hidden>
+        </div>
+      </div>
+
+      <div class="settings-row danger-zone">
+        <div class="settings-label">
+          <span>Reset toàn bộ dữ liệu</span>
+          <small>Xóa vĩnh viễn mọi phiên học và cài đặt</small>
+        </div>
+        <button class="btn btn-danger" id="resetDataBtn"><i class="fa-solid fa-triangle-exclamation"></i><span>Reset</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CONFIRM MODAL ================= -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-box confirm-box card">
+      <div class="confirm-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      <h3 id="confirmTitle">Bạn có chắc chắn?</h3>
+      <p id="confirmMessage">Hành động này không thể hoàn tác.</p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" id="confirmCancelBtn">Hủy</button>
+        <button class="btn btn-danger" id="confirmOkBtn">Xác nhận</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TOASTS ================= -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
